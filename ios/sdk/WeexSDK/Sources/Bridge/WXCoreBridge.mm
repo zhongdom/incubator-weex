@@ -961,23 +961,23 @@ break; \
                     break;
             }
 #else
-            WXLogFlag wxLogLevel;
+            WXLogFlag WeexLogLevel;
             switch (level) {
                 case LogLevel::Error:
-                    wxLogLevel = WXLogFlagError;
+                    WeexLogLevel = WXLogFlagError;
                     break;
                 case LogLevel::Warn:
-                    wxLogLevel = WXLogFlagWarning;
+                    WeexLogLevel = WXLogFlagWarning;
                     break;
                 case LogLevel::Info:
-                    wxLogLevel = WXLogFlagInfo;
+                    WeexLogLevel = WXLogFlagInfo;
                     break;
                 default:
-                    wxLogLevel = WXLogFlagDebug;
+                    WeexLogLevel = WXLogFlagDebug;
                     break;
             }
             
-            [WXLog devLog:wxLogLevel file:file line:line format:@"<%s> %s", tag, log];
+            [WXLog devLog:WeexLogLevel file:file line:line format:@"<%s> %s", tag, log];
 #endif
         }
     };

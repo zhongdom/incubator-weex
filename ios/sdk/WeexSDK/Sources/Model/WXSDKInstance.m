@@ -383,7 +383,7 @@ typedef enum : NSUInteger {
     WX_MONITOR_INSTANCE_PERF_START(WXPTAllRender, self);
 
     NSMutableDictionary *dictionary = [_options mutableCopy];
-    if ([WXLog logLevel] >= WXLogLevelLog) {
+    if ([WXLog logLevel] >= WeexLogLevelLog) {
         dictionary[@"debug"] = @(YES);
     }
 
@@ -469,7 +469,7 @@ typedef enum : NSUInteger {
     WX_MONITOR_INSTANCE_PERF_START(WXPTAllRender, self);
     
     NSMutableDictionary *dictionary = [_options mutableCopy];
-    if ([WXLog logLevel] >= WXLogLevelLog) {
+    if ([WXLog logLevel] >= WeexLogLevelLog) {
         dictionary[@"debug"] = @(YES);
     }
     

@@ -30,11 +30,11 @@
 
 @interface WXConsoleLogHandler : NSObject<WXLogProtocol>
 
-@property (nonatomic, assign) WXLogLevel logLevel;
+@property (nonatomic, assign) WeexLogLevel logLevel;
 
 + (WXConsoleLogHandler *)sharedInstance;
 
-- (WXLogLevel)logLevel;
+- (WeexLogLevel)logLevel;
 
 - (void)log:(WXLogFlag)flag message:(NSString *)message;
 
@@ -55,12 +55,12 @@
 - (instancetype)init
 {
     if (self = [super init]) {
-        _logLevel = WXLogLevelAll;
+        _logLevel = WeexLogLevelAll;
     }
     return self;
 }
 
-- (WXLogLevel)logLevel
+- (WeexLogLevel)logLevel
 {
     return _logLevel;
 }
@@ -94,19 +94,19 @@ WX_EXPORT_METHOD(@selector(switchLogLevel:callback:))
         [WXLog registerExternalLog:OriginalLogger];
     }
     else if ([logLevel isEqualToString:@"error"]) {
-        [WXConsoleLogHandler sharedInstance].logLevel = WXLogLevelError;
+        [WXConsoleLogHandler sharedInstance].logLevel = WeexLogLevelError;
         [WXLog registerExternalLog:[WXConsoleLogHandler sharedInstance]];
     }
     else if ([logLevel isEqualToString:@"warning"]) {
-        [WXConsoleLogHandler sharedInstance].logLevel = WXLogLevelWarning;
+        [WXConsoleLogHandler sharedInstance].logLevel = WeexLogLevelWarning;
         [WXLog registerExternalLog:[WXConsoleLogHandler sharedInstance]];
     }
     else if ([logLevel isEqualToString:@"info"]) {
-        [WXConsoleLogHandler sharedInstance].logLevel = WXLogLevelInfo;
+        [WXConsoleLogHandler sharedInstance].logLevel = WeexLogLevelInfo;
         [WXLog registerExternalLog:[WXConsoleLogHandler sharedInstance]];
     }
     else if ([logLevel isEqualToString:@"debug"]) {
-        [WXConsoleLogHandler sharedInstance].logLevel = WXLogLevelDebug;
+        [WXConsoleLogHandler sharedInstance].logLevel = WeexLogLevelDebug;
         [WXLog registerExternalLog:[WXConsoleLogHandler sharedInstance]];
     }
     

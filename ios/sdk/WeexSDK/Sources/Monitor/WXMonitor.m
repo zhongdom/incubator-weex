@@ -259,7 +259,7 @@ static WXThreadSafeMutableDictionary *globalPerformanceDict;
 
 + (void)printPerformance:(NSDictionary *)commitDict
 {
-    if ([WXLog logLevel] < WXLogLevelLog) {
+    if ([WXLog logLevel] < WeexLogLevelLog) {
         return;
     }
     
