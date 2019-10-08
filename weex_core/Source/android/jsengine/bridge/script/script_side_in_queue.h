@@ -24,7 +24,11 @@
 #define WEEXV8_SCRIPT_SIDE_IN_QUEUE_H
 
 #include "core/bridge/script_bridge.h"
+#ifdef USE_JS_RUNTIME
+#include "js_runtime/weex/task/weex_task_queue.h"
+#else
 #include "android/jsengine/task/weex_task_queue.h"
+#endif
 
 namespace weex {
     namespace bridge {
@@ -94,7 +98,7 @@ namespace weex {
                 int UpdateGlobalConfig(const char *config) override;
 
                 int UpdateInitFrameworkParams(const std::string& key, const std::string& value, const std::string& desc) override;
-
+                void SetLogType(const int logLevel, const bool isPerf) override;
 
             private:
                 std::vector<std::string> usingBackThreadId;

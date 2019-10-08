@@ -75,7 +75,7 @@ static void *threadEntry(void *_td) {
     return static_cast<void **>(nullptr);
 }
 
-extern "C" int serverMain(int argc, char **argv) {
+__attribute__((visibility("default"))) extern "C" int serverMain(int argc, char **argv) {
     unsigned long fd;
     unsigned long fd_client = 0;
     unsigned long enableTrace;
@@ -101,6 +101,7 @@ extern "C" int serverMain(int argc, char **argv) {
 namespace weex {
     namespace bridge {
         namespace js {
+            bool ScriptBridgeInMultiProcess::has_read_alarm_config = false;
 
             static inline const char* GetUTF8StringFromIPCArg(IPCArguments* arguments, size_t index) {
                 return arguments->getByteArray(index)->length == 0 ? nullptr : arguments->getByteArray(index)->content;
@@ -220,6 +221,9 @@ namespace weex {
                                          UpdateGlobalConfig);
                 handler->registerHandler(static_cast<uint32_t>(IPCJSMsg::UpdateInitFrameworkParams),
                                          UpdateInitFrameworkParams);
+
+                handler->registerHandler(static_cast<uint32_t>(IPCJSMsg::SETLOGLEVEL),
+                                         setLogType);
             }
 
             std::unique_ptr<IPCResult> ScriptBridgeInMultiProcess::InitFramework(
@@ -255,8 +259,13 @@ namespace weex {
                     init_framework_params->value = IPCByteArrayToWeexByteArray(ba);
 
                     if(!WeexEnv::getEnv()->enableBackupThread()) {
+#ifdef USE_JS_RUNTIME
+                        std::string type = init_framework_params->type->content;
+                        std::string value = init_framework_params->value->content;
+#else
                         auto type = String::fromUTF8(init_framework_params->type->content);
                         auto value = String::fromUTF8(init_framework_params->value->content);
+#endif
                         if(type == "enableBackupThread") {
                             auto enable = value == "true";
                             LOGE("enable backupThread %d",enable);
@@ -265,6 +274,20 @@ namespace weex {
                             auto enable = value == "true";
                             LOGE("enable backupThreadCache %d",enable);
                             WeexEnv::getEnv()->set_m_cache_task_(enable);
+                        }
+                    }
+                    if (!has_read_alarm_config){
+#ifdef USE_JS_RUNTIME
+                        std::string type = init_framework_params->type->content;
+                        std::string value = init_framework_params->value->content;
+#else
+                        auto type = String::fromUTF8(init_framework_params->type->content);
+                        auto value = String::fromUTF8(init_framework_params->value->content);
+#endif
+                        if (type == "enableAlarmSignal"){
+                            has_read_alarm_config = true;
+                            auto enable = value =="true";
+                            WeexEnv::getEnv()->enableHandleAlarmSignal(enable);
                         }
                     }
 
@@ -419,8 +442,6 @@ namespace weex {
 
             std::unique_ptr<IPCResult> ScriptBridgeInMultiProcess::CreateInstance(
                     IPCArguments *arguments) {
-                LOGD("ScriptBridgeInMultiProcess::CreateInstance");
-
                 const char *instanceID = GetUTF8StringFromIPCArg(arguments, 0);
                 const char *func = GetUTF8StringFromIPCArg(arguments, 1);
                 const char *script = GetUTF8StringFromIPCArg(arguments, 2);
@@ -449,6 +470,7 @@ namespace weex {
                     init_framework_params->value = IPCByteArrayToWeexByteArray(ba);
                     params.push_back(init_framework_params);
                 }
+                LOG_TLOG("jsEngine","ScriptBridgeInMultiProcess::CreateInstance and Id is : %s", instanceID);
                 auto result = createInt32Result(Instance()->script_side()->CreateInstance(
                                         instanceID, func, script, opts, initData, extendsApi,params));
                 freeInitFrameworkParams(params);
@@ -498,6 +520,17 @@ namespace weex {
                 LOGD("ScriptBridgeInMultiProcess::UpdateInitFrameworkParams End");
                 return createVoidResult();
             }
+
+        std::unique_ptr<IPCResult> ScriptBridgeInMultiProcess::setLogType(
+            IPCArguments *arguments) {
+            LOGD("ScriptBridgeInMultiProcess::setLogType");
+            int type = arguments->get<int32_t>(0);
+            int perf = arguments->get<int32_t>(1);
+            Instance()->script_side()->SetLogType(type, perf == 1);
+
+            return createVoidResult();
+        }
+
 
             std::unique_ptr<IPCResult> ScriptBridgeInMultiProcess::TakeHeapSnapshot(
                     IPCArguments *arguments) {

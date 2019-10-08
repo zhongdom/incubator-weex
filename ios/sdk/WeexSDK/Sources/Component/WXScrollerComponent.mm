@@ -226,7 +226,11 @@ WX_EXPORT_METHOD(@selector(resetLoadmore))
         //may be list
         if ([@"scroller" isEqualToString:type]) {
             [weexInstance.apmInstance updateDiffStats:KEY_PAGE_STATS_SCROLLER_NUM withDiffValue:1];
-        }        
+        }
+
+        if (weexInstance.instanceCallback) {
+            weexInstance.instanceCallback(weexInstance, WXScrollerComponentCreatedCallback, self);
+        }
     }
     
     return self;
@@ -266,8 +270,6 @@ WX_EXPORT_METHOD(@selector(resetLoadmore))
         if ([scrollView respondsToSelector:@selector(setContentInsetAdjustmentBehavior:)]) {
             scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
         }
-    } else {
-        // Fallback on earlier versions
     }
     
     if (self.ancestorScroller) {
@@ -935,8 +937,6 @@ WX_EXPORT_METHOD(@selector(resetLoadmore))
             if( offset.y <= _refreshComponent.calculatedFrame.size.height ) {
                 [self loadMoreIfNeed];
             }
-        } else if (velocity.y > 0) {
-            // drop up
         }
     }
     

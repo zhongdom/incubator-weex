@@ -17,7 +17,7 @@
  * under the License.
  */
 //
-// Created by 董亚运 on 2019/1/8.
+// Created by Darin on 2019/1/8.
 //
 
 #include <base/android/log_utils.h>
@@ -87,7 +87,7 @@ void BackToWeexCoreQueue::stop() {
 }
 
 void BackToWeexCoreQueue::IPCTask::run() {
-    if (params.empty())
+    if (params.empty() || WeexEnv::getEnv()->is_app_crashed())
         return;
 
     std::unique_ptr<IPCSerializer> serializer(createIPCSerializer());;

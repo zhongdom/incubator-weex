@@ -44,12 +44,12 @@ void TimerQueue::init() {
 void TimerQueue::start() {
     while (true) {
         auto pTask = getTask();
-        LOGE("getTask return task");
+        LOGD("getTask return task");
 
         if(pTask->global_object_ != nullptr && weexTaskQueue->weexRuntime->hasInstanceId(pTask->instanceID)) {
             weexTaskQueue->addTimerTask(pTask->instanceID, pTask->m_function, pTask->taskId,pTask->global_object_, !pTask->repeat);
             if (pTask->repeat && pTask->global_object_ != nullptr && weexTaskQueue->weexRuntime->hasInstanceId(pTask->instanceID)) {
-                LOGE("repreat");
+                LOGD("repreat");
                 addTimerTask(new TimerTask(pTask));
             }
         }
@@ -114,7 +114,7 @@ TimerTask *TimerQueue::getTask() {
             threadLocker.unlock();
             continue;
         }
-        assert(!taskQueue_.empty());
+        assert(!timerQueue_.empty());
         TimerTask *header = timerQueue_.front();
         nextTaskWhen = header->when;
         if (microTime() > nextTaskWhen) {
