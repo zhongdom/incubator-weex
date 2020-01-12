@@ -51,7 +51,9 @@
 #import "WXPageEventNotifyEvent.h"
 #import "WXConvertUtility.h"
 #import "WXCoreBridge.h"
-#import <WeexSDK/WXDataRenderHandler.h>
+#import "WXDataRenderHandler.h"
+#import "WXDarkSchemeProtocol.h"
+#import "WXDarkSchemeModule.h"
 
 #define WEEX_LITE_URL_SUFFIX           @"wlasm"
 #define WEEX_RENDER_TYPE_PLATFORM       @"platform"
@@ -102,6 +104,20 @@ typedef enum : NSUInteger {
 {
     self = [super init];
     if (self) {
+        if ([WXUtility isDarkSchemeSupportEnabled]) {
+            self.schemeName = [WXUtility isSystemInDarkScheme] ? @"dark" : @"light";
+        }
+        else {
+            self.schemeName = @"light";
+        }
+        
+        // Update scheme value in JS environment.
+        if (([WXUtility isEnvironmentUsingDarkScheme] && [self.schemeName isEqualToString:@"light"]) ||
+            (![WXUtility isEnvironmentUsingDarkScheme] && [self.schemeName isEqualToString:@"dark"])) {
+            [[WXBridgeManager sharedManager] resetEnvironment];
+        }
+        
+        _autoInvertingBehavior = WXAutoInvertingBehaviorDefault;
         _renderType = renderType;
         _appearState = YES;
         
@@ -473,7 +489,12 @@ typedef enum : NSUInteger {
     });
     // ensure default modules/components/handlers are ready before create instance
     [WXSDKEngine registerDefaults];
+    id darkSchemeHandler = [WXSDKInstance darkSchemeColorHandler];
     [[NSNotificationCenter defaultCenter] postNotificationName:WX_SDKINSTANCE_WILL_RENDER object:self];
+    if ([WXSDKInstance darkSchemeColorHandler] != darkSchemeHandler) {
+        // After notification, handler for WXDarkSchemeProtocol might change.
+        self.schemeName = [WXUtility isSystemInDarkScheme] ? @"dark" : @"light";
+    }
 
     if ([self _handleConfigCenter]) {
         int wxErrorCode = 9999;
@@ -538,9 +559,6 @@ typedef enum : NSUInteger {
     if (!self.userInfo[@"jsMainBundleStringContentLength"]) {
         self.userInfo[@"jsMainBundleStringContentLength"] = @([mainBundleString length]);
     }
-    if (!self.userInfo[@"jsMainBundleStringContentLength"]) {
-        self.userInfo[@"jsMainBundleStringContentMd5"] = [WXUtility md5:mainBundleString];
-    }
     
     id<WXPageEventNotifyEventProtocol> pageEvent = [WXSDKEngine handlerForProtocol:@protocol(WXPageEventNotifyEventProtocol)];
     if ([pageEvent respondsToSelector:@selector(pageStart:)]) {
@@ -574,7 +592,12 @@ typedef enum : NSUInteger {
     });
     // ensure default modules/components/handlers are ready before create instance
     [WXSDKEngine registerDefaults];
+    id darkSchemeHandler = [WXSDKInstance darkSchemeColorHandler];
     [[NSNotificationCenter defaultCenter] postNotificationName:WX_SDKINSTANCE_WILL_RENDER object:self];
+    if ([WXSDKInstance darkSchemeColorHandler] != darkSchemeHandler) {
+        // After notification, handler for WXDarkSchemeProtocol might change.
+        self.schemeName = [WXUtility isSystemInDarkScheme] ? @"dark" : @"light";
+    }
     
     _mainBundleString = mainBundleString;
     if ([self _handleConfigCenter]) {
@@ -605,6 +628,14 @@ typedef enum : NSUInteger {
         BOOL useMRCForInvalidJSONObject = [[configCenter configForKey:@"iOS_weex_ext_config.useMRCForInvalidJSONObject" defaultValue:@(YES) isDefault:NULL] boolValue];
         BOOL alwaysUseMRCForObjectToWeexCore = [[configCenter configForKey:@"iOS_weex_ext_config.alwaysUseMRC" defaultValue:@(NO) isDefault:NULL] boolValue];
         ConvertSwitches(isIOS13, useMRCForInvalidJSONObject, alwaysUseMRCForObjectToWeexCore);
+        
+        BOOL isDarkSchemeSupportEnabled = [[configCenter configForKey:@"iOS_weex_ext_config.supportDarkScheme" defaultValue:@(YES) isDefault:NULL] boolValue];
+        if (@available(iOS 13.0, *)) {
+        }
+        else {
+            isDarkSchemeSupportEnabled = NO;
+        }
+        [WXUtility setDarkSchemeSupportEnable:isDarkSchemeSupportEnabled];
     }
     else {
         BOOL isIOS13 = [[[UIDevice currentDevice] systemVersion] integerValue] == 13;
@@ -959,7 +990,7 @@ typedef enum : NSUInteger {
 }
     
 - (BOOL)wlasmRender {
-    if ([_options[@"WLASM_RENDER"] boolValue]) {
+    if ([_options[@"WLASM_RENDER"] boolValue] || [_scriptURL.pathExtension isEqualToString:@"wlasm"] || [_scriptURL.pathExtension isEqualToString:@"wlm"]) {
         return YES;
     }
     return NO;
@@ -1170,6 +1201,107 @@ typedef enum : NSUInteger {
         result = [lastPageInfo copy];
     }
     return result;
+}
+
+- (void)setAutoInvertingBehavior:(WXAutoInvertingBehavior)behavior
+{
+    _autoInvertingBehavior = behavior;
+}
+
++ (id<WXDarkSchemeProtocol>)darkSchemeColorHandler
+{
+    return [WXHandlerFactory handlerForProtocol:@protocol(WXDarkSchemeProtocol)];
+}
+
+- (NSString*)currentSchemeName
+{
+    return self.schemeName;
+}
+
+- (BOOL)isDarkScheme
+{
+    return [self.schemeName isEqualToString:@"dark"];
+}
+
+- (void)setCurrentSchemeName:(NSString*)name
+{
+    if (![WXUtility isDarkSchemeSupportEnabled]) {
+        self.schemeName = @"light";
+        return;
+    }
+    
+    if (name && ![name isEqualToString:self.schemeName]) {
+        self.schemeName = name;
+        
+        if (self.isCustomRenderType) {
+            return;
+        }
+        
+        WXDarkSchemeModule* darkSchemeModule = [self moduleForClass:[WXDarkSchemeModule class]];
+        [darkSchemeModule onInstanceSchemeChanged];
+        
+        // Recursively visit all components and notify that scheme had changed.
+        __weak WXSDKInstance* weakSelf = self;
+        WXPerformBlockOnComponentThread(^{
+            __strong WXSDKInstance* strongSelf = weakSelf;
+            if (strongSelf == nil) {
+                return;
+            }
+            
+            if (!strongSelf->_componentManager.isValid) {
+                return;
+            }
+            
+            [strongSelf->_componentManager enumerateComponentsUsingBlock:^(WXComponent * _Nonnull component, BOOL * _Nonnull stop) {
+                __weak WXComponent* wcomp = component;
+                WXPerformBlockOnMainThread(^{
+                    __strong WXComponent* scomp = wcomp;
+                    if (scomp) {
+                        [scomp schemeDidChange:name];
+                    }
+                });
+            }];
+        });
+        
+        [[WXSDKManager bridgeMgr] fireEvent:_instanceId
+                                        ref:WX_SDK_ROOT_REF
+                                       type:@"schemechange"
+                                     params:@{@"scheme": self.schemeName?:@"light"}
+                                 domChanges:nil];
+    }
+}
+
+- (UIColor*)chooseColor:(UIColor*)originalColor
+       lightSchemeColor:(UIColor*)lightColor
+        darkSchemeColor:(UIColor*)darkColor
+                 invert:(BOOL)invert
+                  scene:(WXColorScene)scene
+{
+    if (![WXUtility isDarkSchemeSupportEnabled]) {
+        return originalColor;
+    }
+    
+    if ([self isDarkScheme]) {
+        if (darkColor) {
+            return darkColor;
+        }
+        else if (invert) {
+            // Invert originalColor
+            if (originalColor == [UIColor clearColor]) {
+                return originalColor;
+            }
+            return [[WXSDKInstance darkSchemeColorHandler] getInvertedColorFor:originalColor ofScene:scene withDefault:originalColor];
+        }
+        else {
+            return originalColor;
+        }
+    }
+    else if (lightColor) {
+        return lightColor;
+    }
+    else {
+        return originalColor;
+    }
 }
 
 @end

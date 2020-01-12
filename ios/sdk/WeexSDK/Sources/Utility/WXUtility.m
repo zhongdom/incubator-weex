@@ -38,11 +38,13 @@
 #import "WXConfigCenterProtocol.h"
 #import "WXTextComponent.h"
 #import "WXAssert.h"
+#import "WXDarkSchemeProtocol.h"
 
 #define KEY_PASSWORD  @"com.taobao.Weex.123456"
 #define KEY_USERNAME_PASSWORD  @"com.taobao.Weex.weex123456"
 
 static BOOL enableRTLLayoutDirection = YES;
+static BOOL isDarkSchemeSupportEnabled = YES;
 
 void WXPerformBlockOnMainThread(void (^ _Nonnull block)(void))
 {
@@ -163,8 +165,35 @@ CGFloat WXFloorPixelValue(CGFloat value)
     return [UIView userInterfaceLayoutDirectionForSemanticContentAttribute:UISemanticContentAttributeUnspecified] == UIUserInterfaceLayoutDirectionRightToLeft ? WXLayoutDirectionRTL : WXLayoutDirectionLTR;
 }
 
++ (BOOL)isSystemInDarkScheme
+{
+    if (@available(iOS 13.0, *)) {
+        __block BOOL result = NO;
+        WXPerformBlockSyncOnMainThread(^{
+#ifdef __IPHONE_13_0
+            id<WXDarkSchemeProtocol> darkSchemeHandler = [WXSDKInstance darkSchemeColorHandler];
+            if ([darkSchemeHandler respondsToSelector:@selector(isApplicationUsingDarkScheme)]) {
+                result = [darkSchemeHandler isApplicationUsingDarkScheme];
+                return;
+            }
+            
+            if ([UITraitCollection currentTraitCollection].userInterfaceStyle == UIUserInterfaceStyleDark) {
+                result = YES;
+            }
+#endif
+        });
+        return result;
+    }
+    return NO;
+}
+
 + (NSDictionary *)getEnvironment
 {
+    NSString* currentScheme = @"light";
+    if ([WXUtility isDarkSchemeSupportEnabled]) {
+        currentScheme = [self isSystemInDarkScheme] ? @"dark" : @"light";
+    }
+    
     NSString *platform = @"iOS";
     NSString *sysVersion = [[UIDevice currentDevice] systemVersion] ?: @"";
     NSString *weexVersion = WX_SDK_VERSION;
@@ -187,7 +216,8 @@ CGFloat WXFloorPixelValue(CGFloat value)
                                     @"deviceWidth":@(deviceWidth * scale),
                                     @"deviceHeight":@(deviceHeight * scale),
                                     @"scale":@(scale),
-                                    @"layoutDirection": [self getEnvLayoutDirection] == WXLayoutDirectionRTL ? @"rtl" : @"ltr"
+                                    @"layoutDirection": [self getEnvLayoutDirection] == WXLayoutDirectionRTL ? @"rtl" : @"ltr",
+                                    @"scheme": currentScheme
                                 }];
     
     if ([[[UIDevice currentDevice] systemVersion] integerValue] >= 11) {
@@ -209,6 +239,20 @@ CGFloat WXFloorPixelValue(CGFloat value)
     }
     
     return data;
+}
+
+static BOOL gIsEnvironmentUsingDarkScheme = NO;
+
++ (NSDictionary *_Nonnull)getEnvironmentForJSContext
+{
+    NSDictionary* result = [self getEnvironment];
+    gIsEnvironmentUsingDarkScheme = [result[@"scheme"] isEqualToString:@"dark"];
+    return result;
+}
+
++ (BOOL)isEnvironmentUsingDarkScheme
+{
+    return gIsEnvironmentUsingDarkScheme;
 }
 
 + (NSDictionary *)getDebugEnvironment {
@@ -385,7 +429,6 @@ CGFloat WXFloorPixelValue(CGFloat value)
         return true;
     }
     if (![string isKindOfClass:[NSString class]]) {
-        WXLogError(@"%@ is not a string", string);
         return true;
     }
     if ([[string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] length] == 0) {
@@ -791,6 +834,18 @@ CGFloat WXFloorPixelValue(CGFloat value)
 + (BOOL)enableRTLLayoutDirection
 {
     return enableRTLLayoutDirection;
+}
+
+#pragma mark - Dark scheme
+
++ (void)setDarkSchemeSupportEnable:(BOOL)value
+{
+    isDarkSchemeSupportEnabled = value;
+}
+
++ (BOOL)isDarkSchemeSupportEnabled
+{
+    return isDarkSchemeSupportEnabled;
 }
 
 #pragma mark - get deviceID

@@ -42,6 +42,8 @@
 #import "WXComponent_performance.h"
 #import "WXAnalyzerCenter.h"
 #import "WXDisplayLinkManager.h"
+#import "WXDarkSchemeProtocol.h"
+#import "WXSDKInstance_private.h"
 
 static NSThread *WXComponentThread;
 
@@ -68,6 +70,7 @@ static NSThread *WXComponentThread;
 
 #define WXAssertComponentExist(component)  WXAssert(component, @"component not exists")
 #define MAX_DROP_FRAME_FOR_BATCH   200
+#define SYNC_UI_EXCEPTION_LOG_INTERVAL 1000
 
 @interface WXComponentManager () <WXDisplayLinkClient>
 @end
@@ -261,6 +264,21 @@ static NSThread *WXComponentThread;
     
     _rootComponent = [self _buildComponent:ref type:type supercomponent:nil styles:styles attributes:attributes events:events renderObject:renderObject];
     
+    if ([WXUtility isDarkSchemeSupportEnabled]) {
+        if (attributes[@"invertForDarkScheme"] == nil) {
+            WXAutoInvertingBehavior invertingBehavior = _weexInstance.autoInvertingBehavior;
+            if (invertingBehavior == WXAutoInvertingBehaviorDefault) {
+                _rootComponent.invertForDarkScheme = [[WXSDKInstance darkSchemeColorHandler] defaultInvertValueForRootComponent];
+            }
+            else if (invertingBehavior == WXAutoInvertingBehaviorAlways) {
+                _rootComponent.invertForDarkScheme = YES;
+            }
+            else {
+                _rootComponent.invertForDarkScheme = NO;
+            }
+        }
+    }
+    
     CGSize size = _weexInstance.frame.size;
     [WXCoreBridge setDefaultDimensionIntoRoot:_weexInstance.instanceId
                                         width:size.width height:size.height
@@ -325,6 +343,11 @@ static NSThread *WXComponentThread;
                 component.ignoreInteraction = NO;
             }
         }
+    }
+    
+    // Not explicitly declare "invertForDarkScheme", inherit
+    if (attributes[@"invertForDarkScheme"] == nil) {
+        component.invertForDarkScheme = supercomponent.invertForDarkScheme;
     }
     
 #ifdef DEBUG
@@ -919,6 +942,9 @@ static NSThread *WXComponentThread;
     [self _addUITask:^{
         UIView *rootView = instance.rootView;
         [instance.performance onInstanceRenderSuccess:instance];
+        if (instance.wlasmRender) {
+            [instance.apmInstance forceSetInteractionTime:[WXUtility getUnixFixTimeMillis]];
+        }
         if (instance.renderFinish) {
             instance.renderFinish(rootView);
         }
@@ -1121,7 +1147,15 @@ static NSThread *WXComponentThread;
         if (blocks.count) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 for(dispatch_block_t block in blocks) {
-                    block();
+                    @try {
+                        block();
+                    } @catch (NSException *exception) {
+                        static NSInteger sCatchCount = 0;
+                        if (++sCatchCount % SYNC_UI_EXCEPTION_LOG_INTERVAL == 1) {
+                            // log for the first time and control interval
+                            WXLogError(@"SyncUI Exception:%@", exception);
+                        }
+                    }
                 }
             });
         }

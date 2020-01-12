@@ -7,6 +7,8 @@ matrix:
       - env: TEST_SUITE=danger 
       - env: TEST_SUITE=jsfm
       - env: TEST_SUITE=ios
+        os: osx
+        osx_image: xcode11.2
         language: objective-c
       - env: TEST_SUITE=android ABI=armeabi-v7a
         language: android
@@ -34,7 +36,8 @@ matrix:
             - extra-android-m2repository 
       # static check
       - env: TEST_SUITE=static_code_analysis OCLINT=true
-        osx_image: xcode7.2
+        os: osx
+        osx_image: xcode11.2
         language: objective-c
       - env: TEST_SUITE=static_code_analysis ANDROID_LINT=true
         language: android
@@ -112,7 +115,7 @@ install:
         git submodule update --init --remote
         cd weex-playground/ios && bash update_podfile_for_travisci.sh
         cd ../../ && npm install
-        cd weex-playground/ios && pod install --repo-update
+        cd weex-playground/ios && bundle install && pod install --repo-update
         cd ../../
     fi
     

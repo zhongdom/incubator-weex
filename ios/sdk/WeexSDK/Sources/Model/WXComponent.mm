@@ -42,6 +42,7 @@
 #import "WXSDKInstance_performance.h"
 #import "WXComponent_performance.h"
 #import "WXCoreBridge.h"
+#import "WXDarkSchemeProtocol.h"
 
 #pragma clang diagnostic ignored "-Wincomplete-implementation"
 #pragma clang diagnostic ignored "-Wobjc-protocol-method-implementation"
@@ -71,6 +72,8 @@ static BOOL bNeedRemoveEvents = YES;
 
 @synthesize transform = _transform;
 @synthesize styleBackgroundColor = _styleBackgroundColor;
+@synthesize darkSchemeBackgroundColor = _darkSchemeBackgroundColor;
+@synthesize lightSchemeBackgroundColor = _lightSchemeBackgroundColor;
 
 #pragma mark Life Cycle
 
@@ -104,6 +107,7 @@ static BOOL bNeedRemoveEvents = YES;
         _eventPenetrationEnabled = NO;
         _accessibilityHintContent = nil;
         _cancelsTouchesInView = YES;
+        _invertForDarkScheme = NO;
         
         _async = NO;
         
@@ -120,6 +124,10 @@ static BOOL bNeedRemoveEvents = YES;
             if (!_styles[@"top"] && !_styles[@"bottom"]) {
                 _styles[@"top"] = @0.0f;
             }
+        }
+        
+        if (attributes[@"invertForDarkScheme"]) {
+            _invertForDarkScheme = [WXConvert BOOL:attributes[@"invertForDarkScheme"]];
         }
         
         if (attributes[@"userInteractionEnabled"]) {
@@ -380,6 +388,12 @@ static BOOL bNeedRemoveEvents = YES;
         [self viewWillLoad];
         
         _view = [self loadView];
+        
+        // Provide a chance for dark scheme handler to process the view
+        if ([WXUtility isDarkSchemeSupportEnabled]) {
+            [[WXSDKInstance darkSchemeColorHandler] configureView:_view ofComponent:self];
+        }
+        
 #ifdef DEBUG
         WXLogDebug(@"flexLayout -> loadView:addr-(%p),componentRef-(%@)",_view,self.ref);
 #endif
@@ -388,11 +402,18 @@ static BOOL bNeedRemoveEvents = YES;
         _view.hidden = _visibility == WXVisibilityShow ? NO : YES;
         _view.clipsToBounds = _clipToBounds;
         if (![self _needsDrawBorder]) {
-            _layer.borderColor = _borderTopColor.CGColor;
+            _layer.borderColor = [self.weexInstance chooseColor:_borderTopColor lightSchemeColor:_lightSchemeBorderTopColor darkSchemeColor:_darkSchemeBorderTopColor invert:_invertForDarkScheme scene:[self colorSceneType]].CGColor;
             _layer.borderWidth = _borderTopWidth;
             [self _resetNativeBorderRadius];
             _layer.opacity = _opacity;
-            _view.backgroundColor = self.styleBackgroundColor;
+
+            if ([WXUtility isDarkSchemeSupportEnabled]) {
+                UIColor* choosedColor = [self.weexInstance chooseColor:self.styleBackgroundColor lightSchemeColor:self.lightSchemeBackgroundColor darkSchemeColor:self.darkSchemeBackgroundColor invert:_invertForDarkScheme scene:[self colorSceneType]];
+                _view.backgroundColor = choosedColor;
+            }
+            else {
+                _view.backgroundColor = self.styleBackgroundColor;
+            }
         }
 
         if (_backgroundImage) {
@@ -405,8 +426,10 @@ static BOOL bNeedRemoveEvents = YES;
         
         [self _adjustForRTL];
         
-        if (_boxShadow) {
-            [self configBoxShadow:_boxShadow];
+        WXBoxShadow* usingBoxShadow = [self _chooseBoxShadow];        
+        if (usingBoxShadow) {
+            _lastBoxShadow = usingBoxShadow;
+            [self configBoxShadow:usingBoxShadow];
         }
         
         _view.wx_component = self;
@@ -845,7 +868,25 @@ static BOOL bNeedRemoveEvents = YES;
     if (CGRectEqualToRect(self.view.frame, CGRectZero)) {
         return;
     }
-    NSDictionary * linearGradient = [WXUtility linearGradientWithBackgroundImage:_backgroundImage];
+    
+    NSString* styleValue = nil;
+    BOOL isDark = [self.weexInstance isDarkScheme];
+    if (isDark) {
+        if (_darkSchemeBackgroundImage) {
+            styleValue = _darkSchemeBackgroundImage;
+        }
+        else {
+            styleValue = _backgroundImage;
+        }
+    }
+    else if (_lightSchemeBackgroundImage) {
+        styleValue = _lightSchemeBackgroundImage;
+    }
+    else {
+        styleValue = _backgroundImage;
+    }
+    
+    NSDictionary * linearGradient = [WXUtility linearGradientWithBackgroundImage:styleValue];
     if (!linearGradient) {
         return ;
     }
@@ -854,6 +895,7 @@ static BOOL bNeedRemoveEvents = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
         __strong typeof(self) strongSelf = weakSelf;
         if(strongSelf) {
+            // No need to auto-invert linear-gradient colors. We only allows using 'dark-scheme-background-image' style.
             UIColor * startColor = (UIColor*)linearGradient[@"startColor"];
             UIColor * endColor = (UIColor*)linearGradient[@"endColor"];
             CAGradientLayer * gradientLayer = [WXUtility gradientLayerFromColors:@[startColor, endColor] locations:nil frame:strongSelf.view.bounds gradientType:(WXGradientType)[linearGradient[@"gradientType"] integerValue]];
